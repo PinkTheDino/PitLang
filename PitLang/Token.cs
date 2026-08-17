@@ -2,10 +2,10 @@
 
 public class Token
 {
-    TokenType type;
-    string lexeme;
-    object? literal;
-    int line;
+    public TokenType type { get; }
+    public string lexeme { get; }
+    public object? literal  { get; }
+    public int line  { get; }
 
     public Token(TokenType type, string lexeme, object? literal, int line)
     {
@@ -17,8 +17,11 @@ public class Token
 
     public override string ToString()
     {
-        return $"Token(lexeme: \"{lexeme}\",tokenType: {type},line: {line},literal: {literal})";
+        string s = $"Token(type: {type}, ";
+        if (lexeme.Length > 0) s += $"lexeme: {lexeme}, ";
+        return s + $"literal: {literal}, line: {line})";
     }
+    
 }
 
 
@@ -26,18 +29,20 @@ public enum TokenType
 {
     //single char
     LEFT_PAREN, RIGHT_PAREN,
+    LEFT_BRACE, RIGHT_BRACE,
     MINUS, PLUS, STAR, SLASH,
-    EQUAL, R_ARROW, L_ARROW,
+    EQUAL, GREATER, LESS,
     BANG, SEMICOLON,
     
     //double char
-    EQUAL_EQUAL, EQUAL_R_ARROW, EQUAL_L_ARROW,
+    EQUAL_EQUAL, GREATER_EQUAL, LESS_EQUAL, BANG_EQUAL,
     
     //literals
-    NUMBER, STRING, IDENTIFIER,
+    NUMBER, STRING, IDENTIFIER, TRUE, FALSE, NIL,
     
     //keywords
-    IF, ELSE, FOR, WHILE,
+    IF, ELSE, FOR, WHILE, AND, OR, VAR,
+    PRINT,
     
     EOF, UNKNOWN
 }

@@ -1,51 +1,144 @@
-﻿namespace PitLang;
+﻿using System.Diagnostics;
 
-public class Scanner
+namespace PitLang;
+
+public abstract class Cursor<TValue, TKey>
 {
-    private readonly string source;
-    private readonly List<Token> tokens = new();
-    private int start;
-    private int i;
-    private int line;
-    
-    public Scanner(string source)
+    public readonly List<TValue> source;
+    protected int current { get;  private set; } = 0;
+
+    public Cursor(IEnumerable<TValue> source)
     {
-        this.source = source;
+        this.source = source.ToList();
     }
     
+    protected virtual void OnAdvance(TValue value) {}
+    protected abstract TKey GetKey(TValue value);
+    protected abstract TValue EndValue();
     
+    protected TValue advance()
+    {
+        TValue result = source[current++];
+        OnAdvance(result);
+        return result;
+    }
+    protected TValue peek(int off = 0)
+    {
+        Debug.Assert(off >= 0);
+        return isEnd(off) ? EndValue() : source[current + off];
+    }
     
+    protected TValue previous(int off = 0)
+    {
+        Debug.Assert(off >= 0);
+        return isEnd(off) ? EndValue() : source[current - off - 1];
+    }
+
+    protected bool match(params TKey[] keys)
+    {
+        
+        TKey k = GetKey(peek());
+        foreach (TKey key in keys)
+        {
+            if (EqualityComparer<TKey>.Default.Equals(k, key))
+            {
+                advance();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected void expect(TKey key, string errorMsg)
+    {
+        if (!match(key))
+        {
+            throw new Exception(errorMsg);
+        }
+    }
     
-    public Token[] Tokenize()
+    protected bool isEnd(int off = 0)
+    {
+        return current + off >= source.Count;
+    }
+
+    protected void reset()
+    {
+        current = 0;
+    }
+}
+
+public class Scanner : Cursor<char, char>
+{
+    private readonly List<Token> tokens = new();
+    private int start;
+    private int line;
+
+    private static readonly Dictionary<string, TokenType> keywords = new()
+    {
+        
+        {"false", TokenType.FALSE},
+        { "nil", TokenType.NIL},
+        {"true", TokenType.TRUE},
+        { "if", TokenType.IF },
+        { "else", TokenType.ELSE },
+        { "while", TokenType.WHILE },
+        { "for", TokenType.FOR },
+        { "and", TokenType.AND },
+        { "or", TokenType.OR },
+        { "var", TokenType.VAR},
+        { "print", TokenType.PRINT},
+    };
+
+    public Scanner(string s) : base(s) {}
+
+    protected override char EndValue()
+    {
+        return '\0';
+    }
+
+    protected override char GetKey(char value)
+    {
+        return value;
+    }
+
+    protected override void OnAdvance(char value)
+    {
+        if (value == '\n') line++;
+    }
+
+
+    public List<Token> Tokenize()
     {
         
         while (!isEnd())
         {
-            start = i;
+            start = current;
             scanToken();
         }
         tokens.Add(new Token(TokenType.EOF, "", null, line+1));
-        return tokens.ToArray();
+        return tokens;
     }
 
     private void scanToken()
     {
         char c = advance();
-
-        if (c == '\n')
-        {
-            line++;
-            return;
-        }
-
-        if (c == ' ') return;
+    
+        if (char.IsWhiteSpace(c)) return;
         
         
         switch (c) 
         {
+            case ';': addToken(TokenType.SEMICOLON);
+                return;
             case '(': addToken(TokenType.LEFT_PAREN);
                 return;
             case ')': addToken(TokenType.RIGHT_PAREN);
+                return;
+            case '{': addToken(TokenType.LEFT_BRACE);
+                return;
+            case '}': addToken(TokenType.RIGHT_BRACE);
                 return;
             case '+': addToken(TokenType.PLUS);
                 return;
@@ -55,6 +148,15 @@ public class Scanner
                 return;
             case '/': addToken(TokenType.SLASH);
                 return;
+            case '!': addToken(match('=') ? TokenType.BANG_EQUAL : TokenType.BANG);    
+                return;
+            case '=': addToken(match('=') ? TokenType.EQUAL_EQUAL : TokenType.EQUAL);   
+                return;
+            case '>': addToken(match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);    
+                return;
+            case '<': addToken(match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER); 
+                return;
+            
         }
 
         if (isNumeric(c))
@@ -73,13 +175,14 @@ public class Scanner
             stringLiteral();
             return;
         }
-        tokens.Add(new Token(TokenType.UNKNOWN, "", null, line));
+        addToken(TokenType.UNKNOWN, null);
     }
 
     private void parserError(string errorMsg)
     {
-        Console.Error.WriteLine(errorMsg);
+        throw new Exception(errorMsg);
     }
+    
 
     private void numberLiteral()
     {
@@ -87,7 +190,7 @@ public class Scanner
 
         if (peek() == '.' && isNumeric(peek(1)))
         {
-            advance(); // get rid of '.'
+            advance(); // get rid of '.' cause doubles
             while(isNumeric(peek())) advance();  
         }
         addToken(TokenType.NUMBER, double.Parse(getLexeme()));
@@ -117,7 +220,8 @@ public class Scanner
         else
         {
             advance();
-            addToken(TokenType.STRING, getLexeme());
+            string str = getLexeme();
+            addToken(TokenType.STRING, str.Substring(1, str.Length - 2));
         }
         
         
@@ -126,21 +230,12 @@ public class Scanner
 
     private bool checkKeyword(string identifier, out TokenType type)
     {
-        type = TokenType.EOF;
-        switch (identifier)
-        {
-            case "if": type = TokenType.IF; break;
-            case "else": type = TokenType.ELSE; break;
-            case "while": type = TokenType.WHILE; break;
-            case "for": type = TokenType.FOR; break;
-        }
-
-        return type != TokenType.EOF;
+        return keywords.TryGetValue(identifier, out type);
     }
 
     private string getLexeme()
     {
-        return source.Substring(start, i - start);
+        return new string(source.GetRange(start, current - start).ToArray());
     }
     
     private void addToken(TokenType type) => addToken(type, null);
@@ -150,53 +245,15 @@ public class Scanner
         Token t = new Token(token, getLexeme(), literal, line);
         tokens.Add(t);
     }
-    
-    //SCANNER HELPERS
-    private char advance()
-    {
-        return source[i++];
-    }
-
-    private char peek(int off = 0)
-    {
-        if (isEnd(off)) return '\0';
-        return source[i+off];
-    }
-
-    private bool match(char c)
-    {
-        if (peek() == c)
-        {
-            advance();
-            return true;
-        }
-
-        return false;
-
-    }
-
-    private bool isEnd(int off = 0)
-    {
-        return i + off >= source.Length;
-    }
 
     public static bool isIdentifier(char c)
     {
         return char.IsLetterOrDigit(c) || c == '_';
     }
     
-    private static bool isAlphanumeric(char c) // can be used be identifier only after it could be an identifier
-    {
-        return char.IsLetterOrDigit(c);
-    }
 
     private static bool isNumeric(char c)
     {
         return char.IsDigit(c);
-    }
-
-    private static bool isLetter(char c)
-    {
-        return char.IsLetter(c);
     }
 }
