@@ -89,6 +89,7 @@ public class Scanner : Cursor<char, char>
         { "or", TokenType.OR },
         { "var", TokenType.VAR},
         { "print", TokenType.PRINT},
+        { "mod", TokenType.MOD},
     };
 
     public Scanner(string s) : base(s) {}
@@ -152,9 +153,9 @@ public class Scanner : Cursor<char, char>
                 return;
             case '=': addToken(match('=') ? TokenType.EQUAL_EQUAL : TokenType.EQUAL);   
                 return;
-            case '>': addToken(match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);    
+            case '<': addToken(match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);    
                 return;
-            case '<': addToken(match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER); 
+            case '>': addToken(match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER); 
                 return;
             
         }

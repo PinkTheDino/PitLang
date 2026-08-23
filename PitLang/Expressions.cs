@@ -2,15 +2,44 @@
 
 namespace PitLang;
 
+public interface Resolved
+{
+    public virtual void Resolve() {}
+}
+
 public abstract class Expression
 {
 
-
+    
     public abstract override string ToString();
 
     public abstract object? Evaluate(Environment env);
-    
-    
+
+    public abstract void Resolve();
+
+    public static bool isTruthyValue(object? o)
+    {
+        switch (o)
+        {
+            case null: return false;
+            case bool b: return b;
+            case string s: return s.Length > 0;
+            case double d: return d > 0;
+        }
+
+        return true;
+    }
+
+    public static string Stringify(object? val)
+    {
+        switch (val)
+        {
+            case null: return "nil";
+            case bool b: return b ? "true" : "false";
+            case double d: return d.ToString(CultureInfo.InvariantCulture);
+            default: return val.ToString() ?? "nil";
+        }
+    } 
 }
 
 public class BinaryExpression : Expression //binary as in two operands, not binary 0101
@@ -33,10 +62,17 @@ public class BinaryExpression : Expression //binary as in two operands, not bina
         switch (oper.type)
         {
             //doubles
-            case TokenType.PLUS: return num(left.Evaluate(env)) + num(right.Evaluate(env));
+            case TokenType.PLUS:
+            {
+                object? l = left.Evaluate(env);
+                object? r = right.Evaluate(env);
+                if (l is string || r is string) return Stringify(l) + Stringify(r);
+                return num(l) + num(r);
+            }
             case TokenType.MINUS: return num(left.Evaluate(env)) - num(right.Evaluate(env));
             case TokenType.STAR: return num(left.Evaluate(env)) * num(right.Evaluate(env));
             case TokenType.SLASH: return num(left.Evaluate(env)) / num(right.Evaluate(env));
+            case TokenType.MOD: return num(left.Evaluate(env)) % num(right.Evaluate(env));
             //booleans
             case TokenType.AND: return boolean(left.Evaluate(env)) && boolean(right.Evaluate(env));
             case TokenType.OR:  return boolean(left.Evaluate(env)) || boolean(right.Evaluate(env));
@@ -46,14 +82,20 @@ public class BinaryExpression : Expression //binary as in two operands, not bina
             
             case TokenType.GREATER_EQUAL: return num(left.Evaluate(env)) >= num(right.Evaluate(env));
             case TokenType.LESS_EQUAL: return num(left.Evaluate(env)) <= num(right.Evaluate(env));
-            case TokenType.GREATER: return num(left.Evaluate(env)) < num(right.Evaluate(env));
-            case TokenType.LESS: return num(left.Evaluate(env)) > num(right.Evaluate(env));
+            case TokenType.GREATER: return num(left.Evaluate(env)) > num(right.Evaluate(env));
+            case TokenType.LESS: return num(left.Evaluate(env)) < num(right.Evaluate(env));
         }
         throw new Exception($"Unexpected expression type {oper.lexeme}");
     }
     
     private double num(object? v) => v is double d ? d : throw new Exception($"Unexpected expression type {oper.lexeme}");
     private bool boolean(object? v) => v is bool b ? b : throw new Exception($"Unexpected expression type {oper.lexeme}");
+
+    public override void Resolve()
+    {
+        left.Resolve();
+        right.Resolve();
+    }
 }
 
 public class LiteralExpression : Expression
@@ -68,7 +110,7 @@ public class LiteralExpression : Expression
     {
         switch (literal)
         {
-            case null: return "null";
+            case null: return "nil";
             case string s: return s;
             case double d: return d.ToString(CultureInfo.InvariantCulture);
             case bool b: return b ? "true" : "false";
@@ -87,6 +129,8 @@ public class LiteralExpression : Expression
         }
         throw new Exception($"Unexpected expression type {literal.GetType().Name}");
     }
+    
+    public override void Resolve() {}
 }
 
 public class UnaryExpression : Expression
@@ -112,6 +156,11 @@ public class UnaryExpression : Expression
     
     private double num(object? v) => v is double d ? d : throw new Exception($"Unexpected expression type {oper.lexeme}");
     private bool boolean(object? v) => v is bool b ? b : throw new Exception($"Unexpected expression type {oper.lexeme}");
+
+    public override void Resolve()
+    {
+        right.Resolve();
+    }
 }
 
 public class VarRefExpression : Expression
@@ -126,5 +175,10 @@ public class VarRefExpression : Expression
     public override object? Evaluate(Environment env)
     {
         return env.GetVariable(id);
+    }
+    
+    public override void Resolve()
+    {
+        ScopeResolver.OnRead(id);
     }
 }

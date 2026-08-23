@@ -41,7 +41,7 @@ public enum TokenType
     NUMBER, STRING, IDENTIFIER, TRUE, FALSE, NIL,
     
     //keywords
-    IF, ELSE, FOR, WHILE, AND, OR, VAR,
+    IF, ELSE, FOR, WHILE, AND, OR, MOD, VAR, 
     PRINT,
     
     EOF, UNKNOWN
